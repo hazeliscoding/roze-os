@@ -266,6 +266,9 @@ fn run(release: bool, debug: bool) -> Result<()> {
 
     let mut cmd = Command::new(&qemu);
     cmd.args(["-M", "q35", "-m", "512M", "-serial", "stdio", "-no-reboot"]);
+    // hardware acceleration when the host offers it, tcg as fallback.
+    // doom under pure emulation runs like a slideshow.
+    cmd.args(["-accel", "whpx,kernel-irqchip=off", "-accel", "tcg"]);
     cmd.arg("-drive");
     cmd.arg(format!(
         "if=pflash,format=raw,readonly=on,file={}",
