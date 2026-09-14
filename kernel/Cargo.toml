@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 limine = "0.5"
+linked_list_allocator = "0.10"
 x86_64 = "0.15"

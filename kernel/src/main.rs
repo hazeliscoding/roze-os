@@ -9,6 +9,8 @@
 // exception handlers use the interrupt calling convention, nightly only
 #![feature(abi_x86_interrupt)]
 
+extern crate alloc;
+
 mod arch;
 mod graphics;
 mod memory;
@@ -67,7 +69,8 @@ unsafe extern "C" fn kmain() -> ! {
     // readable instead of triple faulting
     arch::x86_64::init();
 
-    init_physical_memory();
+    let hhdm = init_physical_memory();
+    memory::heap::init(hhdm);
 
     let fb = framebuffer_from_limine();
     let fb_info = (fb.width(), fb.height(), fb.bpp());
@@ -99,12 +102,34 @@ unsafe extern "C" fn kmain() -> ! {
     println!("int3 handled, back in kmain");
 
     frame_allocator_self_test();
+    heap_self_test();
 
     halt();
 }
 
-/// feed the limine memory map into the frame allocator.
-fn init_physical_memory() {
+/// boot self test: the alloc machinery must actually work. box, vec,
+/// string, growth past the first allocation, and drop.
+fn heap_self_test() {
+    use alloc::boxed::Box;
+    use alloc::string::String;
+    use alloc::vec::Vec;
+
+    let b = Box::new(0xc0ffee_u32);
+    let mut v: Vec<u64> = Vec::new();
+    for i in 0..1000 {
+        v.push(i);
+    }
+    let mut s = String::from("heap self test");
+    s.push_str(" passed");
+    assert!(*b == 0xc0ffee, "box roundtrip failed");
+    assert!(v.len() == 1000 && v[999] == 999, "vec growth failed");
+    drop(v);
+    println!("{} ({} bytes boxed at {:p})", s, core::mem::size_of::<u32>(), b);
+}
+
+/// feed the limine memory map into the frame allocator. returns the
+/// hhdm offset for whoever needs the direct map next.
+fn init_physical_memory() -> u64 {
     let hhdm = HHDM_REQUEST
         .get_response()
         .expect("limine gave no hhdm response")
@@ -127,6 +152,7 @@ fn init_physical_memory() {
         }
     }
     memory::physical::init(&usable[..n], hhdm);
+    hhdm
 }
 
 /// boot self test: two allocations must hand out distinct aligned

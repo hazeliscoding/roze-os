@@ -79,6 +79,29 @@ impl FrameAllocator {
     pub fn free_frames(&self) -> usize {
         self.free
     }
+
+    /// grab `count` physically contiguous frames, returns the base
+    /// address. the heap wants one flat run inside the direct map.
+    /// dumb forward scan, runs once at boot, speed is irrelevant.
+    pub fn allocate_contiguous(&mut self, count: usize) -> Option<u64> {
+        let mut run = 0;
+        for i in 0..self.frames {
+            if self.get(i) {
+                run = 0;
+                continue;
+            }
+            run += 1;
+            if run == count {
+                let first = i + 1 - count;
+                for j in first..=i {
+                    self.set(j);
+                }
+                self.free -= count;
+                return Some((first * FRAME_SIZE) as u64);
+            }
+        }
+        None
+    }
 }
 
 //=====================================================================
