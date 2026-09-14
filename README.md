@@ -40,7 +40,7 @@ The kernel boots through Limine under QEMU (UEFI) and prints its startup banner 
 - [x] Physical memory allocator
 - [x] Kernel heap
 - [x] Timer
-- [ ] PS/2 keyboard
+- [x] PS/2 keyboard
 - [ ] C interop
 - [ ] DoomGeneric integration
 - [ ] DOOM rendering

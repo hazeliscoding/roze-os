@@ -13,6 +13,7 @@ extern crate alloc;
 
 mod arch;
 mod graphics;
+mod input;
 mod memory;
 mod panic;
 mod serial;
@@ -73,8 +74,9 @@ unsafe extern "C" fn kmain() -> ! {
     let hhdm = init_physical_memory();
     memory::heap::init(hhdm);
 
-    // clock on, then let the world in
+    // clock and keyboard on, then let the world in
     time::timer::init();
+    input::keyboard::init();
     x86_64::instructions::interrupts::enable();
 
     let fb = framebuffer_from_limine();
@@ -98,6 +100,7 @@ unsafe extern "C" fn kmain() -> ! {
     println!("Console..................... {}x{} chars", geom.0, geom.1);
     println!("Interrupts.................. GDT, IDT, PIC remapped");
     println!("Timer....................... PIT at {} Hz", time::timer::HZ);
+    println!("Keyboard.................... PS/2, IRQ1");
     println!("Kernel...................... initialized");
     println!();
     println!("hello from RozeOS <3");
@@ -111,7 +114,21 @@ unsafe extern "C" fn kmain() -> ! {
     heap_self_test();
     timer_self_test();
 
-    halt();
+    // milestone 8 test program: sit here and show key traffic. this
+    // loop is where doom slots in later.
+    println!("keyboard echo, press keys in the qemu window");
+    loop {
+        match input::keyboard::poll_event() {
+            Some(ev) => {
+                println!(
+                    "key {:?} {}",
+                    ev.code,
+                    if ev.pressed { "down" } else { "up" }
+                );
+            }
+            None => x86_64::instructions::hlt(),
+        }
+    }
 }
 
 /// boot self test: sleep 100 ms and check the clock moved a sane
@@ -212,15 +229,5 @@ fn framebuffer_from_limine() -> Framebuffer {
             fb.pitch() as usize,
             fb.bpp() as usize,
         )
-    }
-}
-
-/// stop the world. interrupts are not enabled yet so hlt sleeps forever,
-/// the loop is paranoia against spurious wakeups (nmi, smi).
-pub fn halt() -> ! {
-    loop {
-        unsafe {
-            core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
-        }
     }
 }

@@ -13,6 +13,7 @@ use x86_64::structures::idt::{
 };
 
 use super::{gdt, pic};
+use crate::input::keyboard;
 use crate::println;
 use crate::time::timer;
 
@@ -37,6 +38,7 @@ pub fn init() {
             .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
         // hardware lines, remapped pic base upward
         idt[pic::PIC1_OFFSET].set_handler_fn(timer::on_tick);
+        idt[pic::PIC1_OFFSET + 1].set_handler_fn(keyboard::on_irq);
         // static cell, never moves, load_unsafe is fine
         idt.load_unsafe();
     }
