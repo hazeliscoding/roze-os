@@ -1,0 +1,16 @@
+# Build output
+/target/
+
+# Spec / planning documents (local only, never committed)
+/specs/
+
+# AI tooling (local only, never committed)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+.claude-plugin/
+AGENTS.md
+.cursor/
+.cursorrules
+.aider*
+.github/copilot-instructions.md
