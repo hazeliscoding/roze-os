@@ -45,7 +45,7 @@ The kernel boots through Limine under QEMU (UEFI) and prints its startup banner 
 - [x] DoomGeneric integration
 - [x] DOOM rendering
 - [x] DOOM input
-- [ ] WAD loading
+- [x] WAD loading
 - [ ] Playable DOOM 🎮
 - [ ] Boot menu
 
@@ -77,7 +77,9 @@ gdb target/x86_64-unknown-none/debug/kernel -ex "target remote :1234"
 
 ## DOOM WAD
 
-Commercial DOOM WAD files are copyrighted and never committed to this repository. When the WAD milestone lands, place a legally obtained `doom1.wad` (shareware) or [Freedoom](https://freedoom.github.io/) WAD in `assets/` as documented there.
+Place a legally obtained `doom1.wad` (shareware) or [Freedoom](https://freedoom.github.io/) `freedoom1.wad` in `assets/`. The build packs it into the boot image and Limine loads it into RAM as a boot module, so DOOM needs no filesystem and no host OS to find its data. Without a WAD the kernel boots into a keyboard echo loop instead.
+
+Commercial WAD files are copyrighted and never committed to this repository (`assets/*.wad` is gitignored). See `assets/README.md`.
 
 ## License
 
