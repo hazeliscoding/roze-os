@@ -8,8 +8,6 @@
 /// color as 0x00rrggbb. the top byte is ignored by xrgb hardware.
 pub type Color = u32;
 
-pub const WHITE: Color = 0x00ff_ffff;
-
 /// a mapped linear framebuffer and its geometry.
 pub struct Framebuffer {
     address: *mut u8,
@@ -54,6 +52,8 @@ impl Framebuffer {
     }
 
     /// write one pixel. out of bounds writes are dropped, not wrapped.
+    /// idle until doom blits frames through it, keep it around.
+    #[allow(dead_code)]
     #[inline]
     pub fn put_pixel(&mut self, x: usize, y: usize, color: Color) {
         if x >= self.width || y >= self.height {
@@ -84,5 +84,22 @@ impl Framebuffer {
     /// wipe the whole screen to one color.
     pub fn clear(&mut self, color: Color) {
         self.fill_rect(0, 0, self.width, self.height, color);
+    }
+
+    /// shift the whole screen up by `px` scanlines and fill the gap at
+    /// the bottom. the console uses this for scrolling.
+    pub fn scroll_up(&mut self, px: usize, fill: Color) {
+        let px = px.min(self.height);
+        let moved = self.height - px;
+        // overlapping forward copy, dst below src, so plain copy is
+        // fine. reading framebuffer memory is slow but correct.
+        unsafe {
+            core::ptr::copy(
+                self.address.add(px * self.pitch),
+                self.address,
+                moved * self.pitch,
+            );
+        }
+        self.fill_rect(0, moved, self.width, px, fill);
     }
 }

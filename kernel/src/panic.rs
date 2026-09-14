@@ -1,29 +1,30 @@
 //! kernel panic handler.
 //!
-//! no unwinding in kernel space, panic means print what we know over
-//! serial and halt for good. halting beats the reboot loop a triple
-//! fault would give us, the message stays on screen and in the log.
+//! no unwinding in kernel space, panic means print what we know and
+//! halt for good. println hits serial always and the framebuffer
+//! console once it is up, so panics are visible on screen too.
+//! halting beats the reboot loop a triple fault would give us.
 
 use core::panic::PanicInfo;
 
-use crate::serial_println;
+use crate::println;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    serial_println!();
-    serial_println!("=========================");
-    serial_println!("      KERNEL PANIC");
-    serial_println!("=========================");
-    serial_println!();
-    serial_println!("message:");
-    serial_println!("{}", info.message());
-    serial_println!();
+    println!();
+    println!("=========================");
+    println!("      KERNEL PANIC");
+    println!("=========================");
+    println!();
+    println!("message:");
+    println!("{}", info.message());
+    println!();
     if let Some(loc) = info.location() {
-        serial_println!("location:");
-        serial_println!("{}:{}", loc.file(), loc.line());
-        serial_println!();
+        println!("location:");
+        println!("{}:{}", loc.file(), loc.line());
+        println!();
     }
-    serial_println!("RozeOS has halted.");
+    println!("RozeOS has halted.");
 
     // interrupts may be on when we get here, kill them before hlt
     loop {
