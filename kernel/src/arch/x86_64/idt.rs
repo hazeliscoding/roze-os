@@ -12,8 +12,9 @@ use x86_64::structures::idt::{
     InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode,
 };
 
-use super::gdt;
+use super::{gdt, pic};
 use crate::println;
+use crate::time::timer;
 
 /// shared mutable static, same single core argument as the gdt.
 struct Cell<T>(UnsafeCell<T>);
@@ -34,6 +35,8 @@ pub fn init() {
         idt.double_fault
             .set_handler_fn(double_fault)
             .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
+        // hardware lines, remapped pic base upward
+        idt[pic::PIC1_OFFSET].set_handler_fn(timer::on_tick);
         // static cell, never moves, load_unsafe is fine
         idt.load_unsafe();
     }

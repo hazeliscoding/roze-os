@@ -5,7 +5,7 @@
 //! a double fault. remap them to 32-47 and mask every line. the timer
 //! and keyboard milestones unmask what they need.
 
-use super::port::{io_wait, outb};
+use super::port::{inb, io_wait, outb};
 
 const PIC1_CMD: u16 = 0x20;
 const PIC1_DATA: u16 = 0x21;
@@ -44,5 +44,32 @@ pub fn init() {
         // mask everything until a driver asks for a line
         outb(PIC1_DATA, 0xff);
         outb(PIC2_DATA, 0xff);
+    }
+}
+
+/// open one irq line. lines 8-15 live on the secondary pic, which
+/// also needs the cascade line 2 open to deliver anything.
+pub fn unmask(irq: u8) {
+    unsafe {
+        if irq < 8 {
+            let mask = inb(PIC1_DATA) & !(1 << irq);
+            outb(PIC1_DATA, mask);
+        } else {
+            let mask = inb(PIC2_DATA) & !(1 << (irq - 8));
+            outb(PIC2_DATA, mask);
+            let cascade = inb(PIC1_DATA) & !(1 << 2);
+            outb(PIC1_DATA, cascade);
+        }
+    }
+}
+
+/// end of interrupt. the pic holds the line until it hears this, no
+/// eoi means no second tick ever.
+pub fn eoi(irq: u8) {
+    unsafe {
+        if irq >= 8 {
+            outb(PIC2_CMD, 0x20);
+        }
+        outb(PIC1_CMD, 0x20);
     }
 }

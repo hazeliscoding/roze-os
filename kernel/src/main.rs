@@ -16,6 +16,7 @@ mod graphics;
 mod memory;
 mod panic;
 mod serial;
+mod time;
 
 use graphics::console;
 use graphics::framebuffer::Framebuffer;
@@ -72,6 +73,10 @@ unsafe extern "C" fn kmain() -> ! {
     let hhdm = init_physical_memory();
     memory::heap::init(hhdm);
 
+    // clock on, then let the world in
+    time::timer::init();
+    x86_64::instructions::interrupts::enable();
+
     let fb = framebuffer_from_limine();
     let fb_info = (fb.width(), fb.height(), fb.bpp());
     console::init(fb);
@@ -92,6 +97,7 @@ unsafe extern "C" fn kmain() -> ! {
     console::with(|c| geom = (c.cols(), c.rows()));
     println!("Console..................... {}x{} chars", geom.0, geom.1);
     println!("Interrupts.................. GDT, IDT, PIC remapped");
+    println!("Timer....................... PIT at {} Hz", time::timer::HZ);
     println!("Kernel...................... initialized");
     println!();
     println!("hello from RozeOS <3");
@@ -103,8 +109,23 @@ unsafe extern "C" fn kmain() -> ! {
 
     frame_allocator_self_test();
     heap_self_test();
+    timer_self_test();
 
     halt();
+}
+
+/// boot self test: sleep 100 ms and check the clock moved a sane
+/// amount. qemu timing is loose, the window is generous.
+fn timer_self_test() {
+    let t0 = time::timer::ticks_ms();
+    time::timer::sleep_ms(100);
+    let elapsed = time::timer::ticks_ms() - t0;
+    assert!(
+        (90..=400).contains(&elapsed),
+        "slept 100 ms but measured {} ms",
+        elapsed
+    );
+    println!("timer self test passed, 100 ms sleep measured {} ms", elapsed);
 }
 
 /// boot self test: the alloc machinery must actually work. box, vec,
