@@ -113,6 +113,7 @@ unsafe extern "C" fn kmain() -> ! {
     frame_allocator_self_test();
     heap_self_test();
     timer_self_test();
+    c_interop_self_test();
 
     // milestone 8 test program: sit here and show key traffic. this
     // loop is where doom slots in later.
@@ -129,6 +130,19 @@ unsafe extern "C" fn kmain() -> ! {
             None => x86_64::instructions::hlt(),
         }
     }
+}
+
+// compiled c, see kernel/cbits and build.rs
+unsafe extern "C" {
+    fn roze_test() -> i32;
+}
+
+/// boot self test: call into compiled c and check the answer. proves
+/// the whole clang to rust-lld pipeline doomgeneric will ride.
+fn c_interop_self_test() {
+    let r = unsafe { roze_test() };
+    assert!(r == 42, "roze_test returned {r}, expected 42");
+    println!("c interop self test passed, roze_test() = {r}");
 }
 
 /// boot self test: sleep 100 ms and check the clock moved a sane
