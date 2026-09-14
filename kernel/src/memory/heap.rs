@@ -11,9 +11,9 @@ use linked_list_allocator::LockedHeap;
 use super::physical::{self, FRAME_SIZE};
 use crate::println;
 
-/// heap size. generous for a kernel this small, doom will eat most
-/// of it once it moves in.
-pub const HEAP_SIZE: usize = 16 * 1024 * 1024;
+/// heap size. doom's zone allocator, its screen buffer and the level
+/// data all live here, 64 MiB leaves headroom to spare.
+pub const HEAP_SIZE: usize = 64 * 1024 * 1024;
 
 #[global_allocator]
 static HEAP: LockedHeap = LockedHeap::empty();

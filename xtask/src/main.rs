@@ -26,8 +26,9 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const LIMINE_REPO: &str = "https://github.com/limine-bootloader/limine.git";
 const LIMINE_BRANCH: &str = "v8.x-binary";
 
-/// 64 MiB image, partition starts at the customary lba 2048.
-const IMG_SIZE: u64 = 64 * 1024 * 1024;
+/// 128 MiB image, room for a debug kernel and a full wad. partition
+/// starts at the customary lba 2048.
+const IMG_SIZE: u64 = 128 * 1024 * 1024;
 const PART_START_LBA: u64 = 2048;
 const SECTOR: u64 = 512;
 
@@ -153,6 +154,20 @@ fn image(release: bool) -> Result<PathBuf> {
 
         let bootdir = rootdir.create_dir("boot")?;
         copy_into(&bootdir, "kernel", &kernel)?;
+
+        // wad goes in as a limine module when the developer supplied
+        // one. see assets/README.md, wads are never committed.
+        let wad = ["doom1.wad", "freedoom1.wad"]
+            .iter()
+            .map(|n| root.join("assets").join(n))
+            .find(|p| p.exists());
+        match wad {
+            Some(p) => {
+                copy_into(&bootdir, "doom1.wad", &p)?;
+                println!("xtask: wad packed from {}", p.display());
+            }
+            None => println!("xtask: no wad in assets/, doom will not start"),
+        }
 
         copy_into(&rootdir, "limine.conf", &root.join("limine.conf"))?;
     }

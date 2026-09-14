@@ -12,6 +12,7 @@
 extern crate alloc;
 
 mod arch;
+mod doom;
 mod graphics;
 mod input;
 mod memory;
@@ -23,7 +24,8 @@ use graphics::console;
 use graphics::framebuffer::Framebuffer;
 use limine::BaseRevision;
 use limine::request::{
-    FramebufferRequest, HhdmRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker,
+    FramebufferRequest, HhdmRequest, MemoryMapRequest, ModuleRequest, RequestsEndMarker,
+    RequestsStartMarker,
 };
 
 /// tells limine which protocol revision we speak. the bootloader patches
@@ -57,6 +59,11 @@ static MEMORY_MAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
 #[used]
 #[unsafe(link_section = ".requests")]
 static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
+
+/// boot modules. the wad rides in as one, no filesystem needed.
+#[used]
+#[unsafe(link_section = ".requests")]
+static MODULE_REQUEST: ModuleRequest = ModuleRequest::new();
 
 /// kernel entry. named in linker.ld as the elf entry point.
 #[unsafe(no_mangle)]
@@ -115,21 +122,45 @@ unsafe extern "C" fn kmain() -> ! {
     timer_self_test();
     c_interop_self_test();
 
-    // milestone 8 test program: sit here and show key traffic. this
-    // loop is where doom slots in later.
-    println!("keyboard echo, press keys in the qemu window");
-    loop {
-        match input::keyboard::poll_event() {
-            Some(ev) => {
-                println!(
-                    "key {:?} {}",
-                    ev.code,
-                    if ev.pressed { "down" } else { "up" }
-                );
+    // with a wad on board the machine belongs to doom. without one,
+    // fall back to the keyboard echo so the boot still proves itself.
+    match find_wad() {
+        Some(wad) => {
+            println!("wad module found, {} bytes, starting doom", wad.len());
+            doom::run(wad);
+        }
+        None => {
+            println!("no wad module, keyboard echo instead");
+            loop {
+                match input::keyboard::poll_event() {
+                    Some(ev) => {
+                        println!(
+                            "key {:?} {}",
+                            ev.code,
+                            if ev.pressed { "down" } else { "up" }
+                        );
+                    }
+                    None => x86_64::instructions::hlt(),
+                }
             }
-            None => x86_64::instructions::hlt(),
         }
     }
+}
+
+/// find the wad among the boot modules by file extension.
+fn find_wad() -> Option<&'static [u8]> {
+    let resp = MODULE_REQUEST.get_response()?;
+    for module in resp.modules() {
+        let path = module.path().to_bytes();
+        if path.len() >= 4 && path[path.len() - 4..].eq_ignore_ascii_case(b".wad") {
+            // limine keeps modules mapped for the kernel's lifetime
+            let data = unsafe {
+                core::slice::from_raw_parts(module.addr(), module.size() as usize)
+            };
+            return Some(data);
+        }
+    }
+    None
 }
 
 // compiled c, see kernel/cbits and build.rs

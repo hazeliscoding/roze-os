@@ -4,6 +4,9 @@
 # Limine binaries (fetched by xtask)
 /limine/
 
+# Game data, never committed
+assets/*.wad
+
 # Spec / planning documents (local only, never committed)
 /specs/
 

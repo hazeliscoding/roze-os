@@ -53,6 +53,12 @@ impl Console {
         self.cols
     }
 
+    /// raw framebuffer access for full screen clients like doom.
+    /// drawing over console text is the caller's problem.
+    pub fn framebuffer(&mut self) -> &mut Framebuffer {
+        &mut self.fb
+    }
+
     pub fn rows(&self) -> usize {
         self.rows
     }
