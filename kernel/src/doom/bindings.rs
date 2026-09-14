@@ -141,25 +141,33 @@ extern "C" fn roze_exit(status: i32) -> ! {
 
 /// c: void roze_draw_frame(const uint32_t *frame, int w, int h)
 ///
-/// doom renders xrgb into its own buffer, we blit it centered onto
-/// the framebuffer. integer scaling arrives with the rendering
-/// milestone, this copy proves the pipe.
+/// doom renders xrgb into its own buffer, we scale it up by the
+/// largest integer factor that fits and center it. black borders on
+/// the sides when the ratios disagree. at 1280x800 the 640x400 frame
+/// is an exact 2x, fullscreen doom.
 #[unsafe(no_mangle)]
 extern "C" fn roze_draw_frame(frame: *const u32, w: i32, h: i32) {
-    if frame.is_null() {
+    if frame.is_null() || w <= 0 || h <= 0 {
         return;
     }
     let (w, h) = (w as usize, h as usize);
     let src = unsafe { core::slice::from_raw_parts(frame, w * h) };
     console::with(|c| {
         let fb = c.framebuffer();
-        let ox = (fb.width().saturating_sub(w)) / 2;
-        let oy = (fb.height().saturating_sub(h)) / 2;
-        for y in 0..h {
-            for x in 0..w {
-                fb.put_pixel(ox + x, oy + y, src[y * w + x]);
-            }
+        let scale = (fb.width() / w).min(fb.height() / h).max(1);
+        let (dw, dh) = (w * scale, h * scale);
+        let ox = (fb.width().saturating_sub(dw)) / 2;
+        let oy = (fb.height().saturating_sub(dh)) / 2;
+        // letterbox bars, skipped entirely when they have no area
+        if oy > 0 {
+            fb.fill_rect(0, 0, fb.width(), oy, 0);
+            fb.fill_rect(0, oy + dh, fb.width(), fb.height() - oy - dh, 0);
         }
+        if ox > 0 {
+            fb.fill_rect(0, oy, ox, dh, 0);
+            fb.fill_rect(ox + dw, oy, fb.width() - ox - dw, dh, 0);
+        }
+        fb.blit_scaled(src, w, h, scale, ox, oy);
     });
 }
 

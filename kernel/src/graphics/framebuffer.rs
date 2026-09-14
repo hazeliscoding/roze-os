@@ -86,6 +86,43 @@ impl Framebuffer {
         self.fill_rect(0, 0, self.width, self.height, color);
     }
 
+    /// blit an xrgb source buffer scaled up by an integer factor with
+    /// its top left corner at (ox, oy). nearest neighbor by way of
+    /// plain pixel repetition, which is all nearest neighbor is when
+    /// the factor is an integer. doom's frames land here.
+    pub fn blit_scaled(
+        &mut self,
+        src: &[u32],
+        src_w: usize,
+        src_h: usize,
+        scale: usize,
+        ox: usize,
+        oy: usize,
+    ) {
+        if scale == 0 || src.len() < src_w * src_h {
+            return;
+        }
+        if ox + src_w * scale > self.width || oy + src_h * scale > self.height {
+            return;
+        }
+        for sy in 0..src_h {
+            let row = &src[sy * src_w..(sy + 1) * src_w];
+            for ry in 0..scale {
+                let dy = oy + sy * scale + ry;
+                // row base in bytes, then a tight volatile pixel loop
+                let mut p = unsafe { self.address.add(dy * self.pitch + ox * 4) as *mut u32 };
+                for &px in row {
+                    for _ in 0..scale {
+                        unsafe {
+                            core::ptr::write_volatile(p, px);
+                            p = p.add(1);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// shift the whole screen up by `px` scanlines and fill the gap at
     /// the bottom. the console uses this for scrolling.
     pub fn scroll_up(&mut self, px: usize, fill: Color) {
