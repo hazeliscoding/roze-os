@@ -28,12 +28,12 @@ The kernel is deliberately simple: synchronous, single-core, monolithic, framebu
 
 ## Status 🚧
 
-Early days. The repository is being bootstrapped, starting with a freestanding Rust kernel that boots through Limine under QEMU.
+The kernel boots through Limine under QEMU (UEFI) and prints its startup banner over serial.
 
 ### Milestones
 
-- [ ] Boot (Limine + QEMU)
-- [ ] Serial console
+- [x] Boot (Limine + QEMU)
+- [x] Serial console
 - [ ] Framebuffer graphics
 - [ ] Kernel console (framebuffer text)
 - [ ] Interrupts (GDT/IDT/exceptions)
@@ -51,19 +51,28 @@ Early days. The repository is being bootstrapped, starting with a freestanding R
 
 ## Prerequisites
 
-- Rust nightly toolchain
-- QEMU (`qemu-system-x86_64`)
+- Rust (stable, via rustup; the `x86_64-unknown-none` target is pulled in by `rust-toolchain.toml`)
+- QEMU (`qemu-system-x86_64`) with its bundled edk2 UEFI firmware
+- Git (xtask fetches Limine binaries with it)
 - Clang or GCC (for the DoomGeneric C code, later milestones)
-- xorriso (for building the boot ISO)
 
 ## Building and running
 
-Build and run instructions land with the first bootable milestone. The intended workflow:
+```bash
+cargo xtask build    # compile the kernel (x86_64-unknown-none)
+cargo xtask image    # build target/rozeos.img (MBR + FAT32, written in pure Rust)
+cargo xtask run      # boot the image in QEMU, serial on stdio
+cargo xtask debug    # same, but QEMU waits for GDB on :1234
+```
+
+The boot image is UEFI-only for now: no xorriso or mtools needed, so it builds the same on Windows, Linux, and macOS. Kernel logs arrive over COM1.
+
+## Debugging
+
+`cargo xtask debug` starts QEMU frozen with a GDB stub:
 
 ```bash
-cargo xtask build
-cargo xtask run
-cargo xtask debug   # QEMU with GDB stub
+gdb target/x86_64-unknown-none/debug/kernel -ex "target remote :1234"
 ```
 
 ## DOOM WAD

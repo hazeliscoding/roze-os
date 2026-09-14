@@ -1,6 +1,9 @@
 # Build output
 /target/
 
+# Limine binaries (fetched by xtask)
+/limine/
+
 # Spec / planning documents (local only, never committed)
 /specs/
 

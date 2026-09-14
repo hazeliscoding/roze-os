@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = ["kernel", "xtask"]
+
+# plain `cargo build` builds the host tooling only. the kernel is
+# freestanding and gets built through `cargo xtask build` with the
+# proper target and linker script.
+default-members = ["xtask"]

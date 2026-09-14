@@ -1,0 +1,7 @@
+[alias]
+xtask = "run -p xtask --"
+
+# the bare metal target defaults to pie, limine wants a plain static
+# elf linked at the higher half address from linker.ld
+[target.x86_64-unknown-none]
+rustflags = ["-C", "relocation-model=static"]
