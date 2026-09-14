@@ -37,7 +37,7 @@ The kernel boots through Limine under QEMU (UEFI) and prints its startup banner 
 - [x] Framebuffer graphics
 - [x] Kernel console (framebuffer text)
 - [x] Interrupts (GDT/IDT/exceptions)
-- [ ] Physical memory allocator
+- [x] Physical memory allocator
 - [ ] Kernel heap
 - [ ] Timer
 - [ ] PS/2 keyboard
