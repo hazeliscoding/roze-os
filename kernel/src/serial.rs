@@ -4,8 +4,9 @@
 //! debug channel of record. polled io only, no interrupts. the kernel is
 //! single core with interrupts off, so unguarded port access is sound.
 
-use core::arch::asm;
 use core::fmt;
+
+use crate::arch::x86_64::port::{inb, outb};
 
 /// com1 base port. pc compatible since the ibm at.
 const COM1: u16 = 0x3f8;
@@ -20,24 +21,6 @@ const LSR: u16 = 5; // line status
 
 /// lsr bit 5, transmit holding register empty.
 const LSR_THRE: u8 = 1 << 5;
-
-#[inline]
-unsafe fn outb(port: u16, val: u8) {
-    unsafe {
-        asm!("out dx, al", in("dx") port, in("al") val,
-             options(nomem, nostack, preserves_flags));
-    }
-}
-
-#[inline]
-unsafe fn inb(port: u16) -> u8 {
-    let val: u8;
-    unsafe {
-        asm!("in al, dx", out("al") val, in("dx") port,
-             options(nomem, nostack, preserves_flags));
-    }
-    val
-}
 
 /// program com1 for 115200 8n1 with fifos on. call once at boot before
 /// any logging happens.

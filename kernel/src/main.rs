@@ -6,7 +6,10 @@
 
 #![no_std]
 #![no_main]
+// exception handlers use the interrupt calling convention, nightly only
+#![feature(abi_x86_interrupt)]
 
+mod arch;
 mod graphics;
 mod panic;
 mod serial;
@@ -46,6 +49,10 @@ unsafe extern "C" fn kmain() -> ! {
         panic!("limine base revision not supported by bootloader");
     }
 
+    // tables first, so anything that faults from here on panics
+    // readable instead of triple faulting
+    arch::x86_64::init();
+
     let fb = framebuffer_from_limine();
     let fb_info = (fb.width(), fb.height(), fb.bpp());
     console::init(fb);
@@ -61,9 +68,15 @@ unsafe extern "C" fn kmain() -> ! {
     let mut geom = (0, 0);
     console::with(|c| geom = (c.cols(), c.rows()));
     println!("Console..................... {}x{} chars", geom.0, geom.1);
+    println!("Interrupts.................. GDT, IDT, PIC remapped");
     println!("Kernel...................... initialized");
     println!();
     println!("hello from RozeOS <3");
+
+    // boot self test: int3 must come back alive. proves the idt is
+    // loaded and handlers return properly.
+    x86_64::instructions::interrupts::int3();
+    println!("int3 handled, back in kmain");
 
     halt();
 }

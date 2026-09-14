@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 limine = "0.5"
+x86_64 = "0.15"
