@@ -1,6 +1,6 @@
 //! kernel heap.
 //!
-//! a fixed 16 MiB slab of physically contiguous frames, addressed
+//! a fixed 64 MiB slab of physically contiguous frames, addressed
 //! through the higher half direct map so no page table surgery is
 //! needed. linked_list_allocator does the bookkeeping and serves the
 //! rust alloc machinery: box, vec, string, the lot. doom gets its

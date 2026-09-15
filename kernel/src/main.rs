@@ -16,6 +16,7 @@ mod doom;
 mod graphics;
 mod input;
 mod memory;
+mod menu;
 mod panic;
 mod serial;
 mod time;
@@ -122,29 +123,14 @@ unsafe extern "C" fn kmain() -> ! {
     timer_self_test();
     c_interop_self_test();
 
-    // with a wad on board the machine belongs to doom. without one,
-    // fall back to the keyboard echo so the boot still proves itself.
-    match find_wad() {
-        Some(wad) => {
-            println!("wad module found, {} bytes, starting doom", wad.len());
-            doom::run(wad);
-        }
-        None => {
-            println!("no wad module, keyboard echo instead");
-            loop {
-                match input::keyboard::poll_event() {
-                    Some(ev) => {
-                        println!(
-                            "key {:?} {}",
-                            ev.code,
-                            if ev.pressed { "down" } else { "up" }
-                        );
-                    }
-                    None => x86_64::instructions::hlt(),
-                }
-            }
-        }
+    // the menu owns the machine from here. with a wad on board doom
+    // is one keypress away, without one the entry sits parked.
+    let wad = find_wad();
+    match wad {
+        Some(w) => println!("wad module found, {} bytes", w.len()),
+        None => println!("no wad module, doom entry disabled"),
     }
+    menu::run(wad);
 }
 
 /// find the wad among the boot modules by file extension.

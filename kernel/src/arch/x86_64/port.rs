@@ -12,6 +12,16 @@ pub unsafe fn outb(port: u16, val: u8) {
     }
 }
 
+/// write one 16 bit word to an io port. acpi pm registers want word
+/// writes, byte writes get ignored.
+#[inline]
+pub unsafe fn outw(port: u16, val: u16) {
+    unsafe {
+        asm!("out dx, ax", in("dx") port, in("ax") val,
+             options(nomem, nostack, preserves_flags));
+    }
+}
+
 /// read one byte from an io port.
 #[inline]
 pub unsafe fn inb(port: u16) -> u8 {

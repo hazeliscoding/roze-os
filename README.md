@@ -28,7 +28,7 @@ The kernel is deliberately simple: synchronous, single-core, monolithic, framebu
 
 ## Status 🚧
 
-The kernel boots through Limine under QEMU (UEFI) and prints its startup banner over serial.
+The kernel boots through Limine under QEMU (UEFI) into a boot menu, and DOOM is one keypress away. All v0.1 milestones are done.
 
 ### Milestones
 
@@ -47,7 +47,7 @@ The kernel boots through Limine under QEMU (UEFI) and prints its startup banner 
 - [x] DOOM input
 - [x] WAD loading
 - [x] Playable DOOM 🎮
-- [ ] Boot menu
+- [x] Boot menu
 
 ## Prerequisites
 
@@ -79,9 +79,13 @@ gdb target/x86_64-unknown-none/debug/kernel -ex "target remote :1234"
 
 ## DOOM WAD
 
-Place a legally obtained `doom1.wad` (shareware) or [Freedoom](https://freedoom.github.io/) `freedoom1.wad` in `assets/`. The build packs it into the boot image and Limine loads it into RAM as a boot module, so DOOM needs no filesystem and no host OS to find its data. Without a WAD the kernel boots into a keyboard echo loop instead.
+Place a legally obtained `doom1.wad` (shareware) or [Freedoom](https://freedoom.github.io/) `freedoom1.wad` in `assets/`. The build packs it into the boot image and Limine loads it into RAM as a boot module, so DOOM needs no filesystem and no host OS to find its data. Without a WAD the kernel still boots to the menu, with the DOOM entry disabled.
 
 Commercial WAD files are copyrighted and never committed to this repository (`assets/*.wad` is gitignored). See `assets/README.md`.
+
+## Boot menu
+
+The kernel lands in a small launcher styled after the SIGIL design system: Play DOOM, System Info, Graphics Test, Reboot, Shutdown. Arrows or digits to select, Enter to launch, Escape to leave a subscreen. Without a WAD the DOOM entry sits parked and everything else still works.
 
 ## License
 

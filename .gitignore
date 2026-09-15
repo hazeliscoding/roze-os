@@ -11,6 +11,9 @@ assets/*
 # Spec / planning documents (local only, never committed)
 /specs/
 
+# Generated course site (local only, never committed)
+/course/
+
 # AI tooling (local only, never committed)
 CLAUDE.md
 CLAUDE.local.md
