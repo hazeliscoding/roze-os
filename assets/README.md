@@ -11,7 +11,10 @@ assets/
 
 Sources:
 
-- DOOM shareware `doom1.wad`: freely distributable, widely mirrored
+- DOOM shareware `doom1.wad`: freely distributable, widely mirrored.
+  The real one is an IWAD of roughly 4 MiB. Plenty of sites serve mod
+  PWADs under the same name; the build checks the magic bytes and
+  refuses those with a message instead of crashing in game.
 - Freedoom: https://freedoom.github.io/ (grab `freedoom1.wad` from the
   release zip)
 

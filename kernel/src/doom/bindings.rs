@@ -105,6 +105,28 @@ extern "C" fn roze_realloc(ptr: *mut u8, new_size: usize) -> *mut u8 {
 // logging, time, exit
 //=====================================================================
 
+/// tail of the doom log, one line. panics quote it so an engine
+/// error survives being buried under the panic banner.
+struct LogTail {
+    cur: [u8; 120],
+    cur_len: usize,
+    last: [u8; 120],
+    last_len: usize,
+}
+
+/// single core, no interrupts touch this: same argument as the
+/// console cell.
+struct TailCell(core::cell::UnsafeCell<LogTail>);
+
+unsafe impl Sync for TailCell {}
+
+static LOG_TAIL: TailCell = TailCell(core::cell::UnsafeCell::new(LogTail {
+    cur: [0; 120],
+    cur_len: 0,
+    last: [0; 120],
+    last_len: 0,
+}));
+
 /// c: void roze_log_write(const char *buf, long len)
 #[unsafe(no_mangle)]
 extern "C" fn roze_log_write(buf: *const u8, len: i64) {
@@ -115,6 +137,20 @@ extern "C" fn roze_log_write(buf: *const u8, len: i64) {
     // doom output is ascii, anything else renders as the box glyph
     for &b in bytes {
         print!("{}", b as char);
+    }
+    // remember the last completed non empty line for exit context
+    let tail = unsafe { &mut *LOG_TAIL.0.get() };
+    for &b in bytes {
+        if b == b'\n' {
+            if tail.cur_len > 0 {
+                tail.last = tail.cur;
+                tail.last_len = tail.cur_len;
+                tail.cur_len = 0;
+            }
+        } else if tail.cur_len < tail.cur.len() {
+            tail.cur[tail.cur_len] = b;
+            tail.cur_len += 1;
+        }
     }
 }
 
@@ -129,10 +165,19 @@ extern "C" fn roze_sleep_ms(ms: u32) {
 }
 
 /// c: void roze_exit(int status). doom exiting means the workload is
-/// gone, treat it as a panic so the message stays on screen.
+/// gone, treat it as a panic. the last log line rides along, that is
+/// where I_Error put its reason.
 #[unsafe(no_mangle)]
 extern "C" fn roze_exit(status: i32) -> ! {
-    panic!("doom exited with status {status}");
+    let tail = unsafe { &*LOG_TAIL.0.get() };
+    // prefer an unfinished line, error text often lacks the newline
+    let (buf, len) = if tail.cur_len > 0 {
+        (&tail.cur, tail.cur_len)
+    } else {
+        (&tail.last, tail.last_len)
+    };
+    let line = core::str::from_utf8(&buf[..len]).unwrap_or("");
+    panic!("doom exited with status {status}: {line}");
 }
 
 //=====================================================================

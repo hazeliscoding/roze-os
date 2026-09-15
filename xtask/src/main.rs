@@ -13,6 +13,7 @@
 use std::error::Error;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -42,14 +43,22 @@ fn workspace_root() -> PathBuf {
 
 fn main() {
     let cmd = std::env::args().nth(1).unwrap_or_default();
-    let release = std::env::args().any(|a| a == "--release");
+    // run defaults to release, doom in a debug build is a slideshow.
+    // build/image/debug default to debug for fast iteration and
+    // useful symbols. either can be overridden.
+    let explicit_release = std::env::args().any(|a| a == "--release");
+    let explicit_debug = std::env::args().any(|a| a == "--debug");
+    let release = match cmd.as_str() {
+        "run" => !explicit_debug,
+        _ => explicit_release,
+    };
     let result = match cmd.as_str() {
         "build" => build_kernel(release).map(|_| ()),
         "image" => image(release).map(|_| ()),
         "run" => run(release, false),
         "debug" => run(release, true),
         _ => {
-            eprintln!("usage: cargo xtask <build|image|run|debug> [--release]");
+            eprintln!("usage: cargo xtask <build|image|run|debug> [--release|--debug]");
             std::process::exit(2);
         }
     };
@@ -156,17 +165,36 @@ fn image(release: bool) -> Result<PathBuf> {
         copy_into(&bootdir, "kernel", &kernel)?;
 
         // wad goes in as a limine module when the developer supplied
-        // one. see assets/README.md, wads are never committed.
-        let wad = ["doom1.wad", "freedoom1.wad"]
-            .iter()
-            .map(|n| root.join("assets").join(n))
-            .find(|p| p.exists());
+        // one. see assets/README.md, wads are never committed. doom
+        // needs an IWAD, mod PWADs get refused here instead of dying
+        // as a missing lump panic at runtime.
+        let mut wad = None;
+        for name in ["doom1.wad", "freedoom1.wad"] {
+            let p = root.join("assets").join(name);
+            if !p.exists() {
+                continue;
+            }
+            let mut magic = [0u8; 4];
+            fs::File::open(&p)?.read_exact(&mut magic)?;
+            match &magic {
+                b"IWAD" => {
+                    wad = Some(p);
+                    break;
+                }
+                b"PWAD" => println!(
+                    "xtask: {} is a PWAD (mod data, not the game), skipping. \
+                     doom needs an IWAD: shareware doom1.wad (~4 MiB) or freedoom1.wad",
+                    p.display()
+                ),
+                _ => println!("xtask: {} is not a wad file, skipping", p.display()),
+            }
+        }
         match wad {
             Some(p) => {
                 copy_into(&bootdir, "doom1.wad", &p)?;
                 println!("xtask: wad packed from {}", p.display());
             }
-            None => println!("xtask: no wad in assets/, doom will not start"),
+            None => println!("xtask: no usable iwad in assets/, doom will not start"),
         }
 
         copy_into(&rootdir, "limine.conf", &root.join("limine.conf"))?;

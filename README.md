@@ -46,7 +46,7 @@ The kernel boots through Limine under QEMU (UEFI) and prints its startup banner 
 - [x] DOOM rendering
 - [x] DOOM input
 - [x] WAD loading
-- [ ] Playable DOOM 🎮
+- [x] Playable DOOM 🎮
 - [ ] Boot menu
 
 ## Prerequisites
@@ -61,9 +61,11 @@ The kernel boots through Limine under QEMU (UEFI) and prints its startup banner 
 ```bash
 cargo xtask build    # compile the kernel (x86_64-unknown-none)
 cargo xtask image    # build target/rozeos.img (MBR + FAT32, written in pure Rust)
-cargo xtask run      # boot the image in QEMU, serial on stdio
-cargo xtask debug    # same, but QEMU waits for GDB on :1234
+cargo xtask run      # boot the image in QEMU, serial on stdio (release build)
+cargo xtask debug    # same, but QEMU waits for GDB on :1234 (debug build)
 ```
+
+`run` builds release by default because DOOM in a debug build drops frames; pass `--debug` to override. The other commands default to debug, pass `--release` to override.
 
 The boot image is UEFI-only for now: no xorriso or mtools needed, so it builds the same on Windows, Linux, and macOS. Kernel logs arrive over COM1.
 

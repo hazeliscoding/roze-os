@@ -4,8 +4,9 @@
 # Limine binaries (fetched by xtask)
 /limine/
 
-# Game data, never committed
-assets/*.wad
+# Game data, never committed. Only the README survives.
+assets/*
+!assets/README.md
 
 # Spec / planning documents (local only, never committed)
 /specs/
