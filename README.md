@@ -63,9 +63,14 @@ cargo xtask build    # compile the kernel (x86_64-unknown-none)
 cargo xtask image    # build target/rozeos.img (MBR + FAT32, written in pure Rust)
 cargo xtask run      # boot the image in QEMU, serial on stdio (release build)
 cargo xtask debug    # same, but QEMU waits for GDB on :1234 (debug build)
+cargo xtask test     # headless boot test, asserts on serial markers
 ```
 
-`run` builds release by default because DOOM in a debug build drops frames; pass `--debug` to override. The other commands default to debug, pass `--release` to override.
+`run` and `test` build release by default because DOOM in a debug build drops frames; pass `--debug` to override. The other commands default to debug, pass `--release` to override.
+
+## Testing
+
+`cargo xtask test` boots the real image in headless QEMU and fails on any panic or timeout. It watches serial for the boot self tests, then drives the menu by injecting scancodes through the QEMU monitor: opens System Info and the graphics test, and with a WAD packed launches DOOM and waits for the engine to finish init. No WAD, it exercises the shutdown path instead. Every kernel subsystem sits somewhere on that path, so a green run means boot, interrupts, memory, input, and the C bridge all still work.
 
 The boot image is UEFI-only for now: no xorriso or mtools needed, so it builds the same on Windows, Linux, and macOS. Kernel logs arrive over COM1.
 

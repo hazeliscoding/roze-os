@@ -5,6 +5,8 @@
 //!   cargo xtask image    build kernel and pack a bootable disk image
 //!   cargo xtask run      image + boot it in qemu
 //!   cargo xtask debug    same but qemu waits for gdb on :1234
+//!   cargo xtask test     headless boot test, drives the menu over the
+//!                        qemu monitor and asserts on serial markers
 //!
 //! the disk image is a plain mbr + fat32 layout written entirely from
 //! rust, no xorriso or mtools needed. uefi firmware finds the limine
@@ -49,7 +51,9 @@ fn main() {
     let explicit_release = std::env::args().any(|a| a == "--release");
     let explicit_debug = std::env::args().any(|a| a == "--debug");
     let release = match cmd.as_str() {
-        "run" => !explicit_debug,
+        // test matches run: doom under a debug build is too slow to
+        // meet the harness timeouts honestly
+        "run" | "test" => !explicit_debug,
         _ => explicit_release,
     };
     let result = match cmd.as_str() {
@@ -57,8 +61,9 @@ fn main() {
         "image" => image(release).map(|_| ()),
         "run" => run(release, false),
         "debug" => run(release, true),
+        "test" => test(release),
         _ => {
-            eprintln!("usage: cargo xtask <build|image|run|debug> [--release|--debug]");
+            eprintln!("usage: cargo xtask <build|image|run|debug|test> [--release|--debug]");
             std::process::exit(2);
         }
     };
@@ -125,8 +130,9 @@ fn ensure_limine(root: &Path) -> Result<PathBuf> {
 //=====================================================================
 
 /// build the bootable disk image: mbr with one efi system partition,
-/// fat32 inside, limine + kernel + config on top.
-fn image(release: bool) -> Result<PathBuf> {
+/// fat32 inside, limine + kernel + config on top. the bool reports
+/// whether a wad went in, the boot test branches on it.
+fn image(release: bool) -> Result<(PathBuf, bool)> {
     let root = workspace_root();
     let kernel = build_kernel(release)?;
     let limine_dir = ensure_limine(&root)?;
@@ -153,6 +159,7 @@ fn image(release: bool) -> Result<PathBuf> {
             .volume_label(*b"ROZEOS     "),
     )?;
     let fs = fatfs::FileSystem::new(disk, fatfs::FsOptions::new())?;
+    let wad_packed;
     {
         let rootdir = fs.root_dir();
 
@@ -189,20 +196,21 @@ fn image(release: bool) -> Result<PathBuf> {
                 _ => println!("xtask: {} is not a wad file, skipping", p.display()),
             }
         }
-        match wad {
+        match &wad {
             Some(p) => {
-                copy_into(&bootdir, "doom1.wad", &p)?;
+                copy_into(&bootdir, "doom1.wad", p)?;
                 println!("xtask: wad packed from {}", p.display());
             }
             None => println!("xtask: no usable iwad in assets/, doom will not start"),
         }
 
+        wad_packed = wad.is_some();
         copy_into(&rootdir, "limine.conf", &root.join("limine.conf"))?;
     }
     fs.unmount()?;
 
     println!("xtask: image at {}", img_path.display());
-    Ok(img_path)
+    Ok((img_path, wad_packed))
 }
 
 /// classic mbr: one bootable partition, type 0xef (efi system),
@@ -272,13 +280,9 @@ fn which(name: &str) -> Result<PathBuf> {
     Err(format!("{name} not in PATH").into())
 }
 
-/// boot the image under qemu with uefi firmware. serial goes to stdio
-/// so kernel logs land in the terminal.
-fn run(release: bool, debug: bool) -> Result<()> {
-    let root = workspace_root();
-    let img = image(release)?;
-    let qemu = find_qemu()?;
-
+/// shared qemu invocation: q35, serial on stdio, uefi flash and the
+/// boot image attached. callers stack their own flags on top.
+fn qemu_base(root: &Path, qemu: &Path, img: &Path) -> Result<Command> {
     // firmware ships next to the qemu binary. code is read only, vars
     // get a writable per-project copy so nvram scribbles stay local.
     let share = qemu.parent().unwrap().join("share");
@@ -292,7 +296,7 @@ fn run(release: bool, debug: bool) -> Result<()> {
         fs::copy(&vars_src, &vars)?;
     }
 
-    let mut cmd = Command::new(&qemu);
+    let mut cmd = Command::new(qemu);
     cmd.args(["-M", "q35", "-m", "512M", "-serial", "stdio", "-no-reboot"]);
     // hardware acceleration when the host offers it, tcg as fallback.
     // doom under pure emulation runs like a slideshow.
@@ -306,6 +310,16 @@ fn run(release: bool, debug: bool) -> Result<()> {
     cmd.arg(format!("if=pflash,format=raw,file={}", vars.display()));
     cmd.arg("-drive");
     cmd.arg(format!("format=raw,file={}", img.display()));
+    Ok(cmd)
+}
+
+/// boot the image under qemu with uefi firmware. serial goes to stdio
+/// so kernel logs land in the terminal.
+fn run(release: bool, debug: bool) -> Result<()> {
+    let root = workspace_root();
+    let (img, _) = image(release)?;
+    let qemu = find_qemu()?;
+    let mut cmd = qemu_base(&root, &qemu, &img)?;
     if debug {
         // -s listens on :1234, -S freezes the cpu until gdb says go
         cmd.args(["-s", "-S"]);
@@ -315,5 +329,154 @@ fn run(release: bool, debug: bool) -> Result<()> {
     if !status.success() {
         return Err("qemu exited with failure".into());
     }
+    Ok(())
+}
+
+//=====================================================================
+// boot test
+//=====================================================================
+
+/// serial lines a clean boot must produce, in this order. every entry
+/// is backed by an assert in the kernel, a miss means a layer broke.
+const BOOT_MARKERS: &[&str] = &[
+    "int3 handled",
+    "frame allocator self test passed",
+    "heap self test passed",
+    "timer self test passed",
+    "c interop self test passed",
+    "menu: up",
+];
+
+/// headless end to end test. boots the real image, watches serial for
+/// the self test markers, then drives the menu by injecting scancodes
+/// through the qemu monitor: sysinfo, graphics test, and doom when a
+/// wad is aboard, shutdown when not. any panic or timeout fails it.
+fn test(release: bool) -> Result<()> {
+    use std::io::{BufRead, BufReader, Write as _};
+    use std::net::{TcpListener, TcpStream};
+    use std::process::Stdio;
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    let root = workspace_root();
+    let (img, wad) = image(release)?;
+    let qemu = find_qemu()?;
+
+    // grab a free port for the monitor, then hand it to qemu. the
+    // gap between drop and listen is a race nobody will ever win.
+    let port = TcpListener::bind("127.0.0.1:0")?.local_addr()?.port();
+
+    let mut cmd = qemu_base(&root, &qemu, &img)?;
+    cmd.args(["-display", "none"]);
+    cmd.arg("-monitor");
+    cmd.arg(format!("telnet:127.0.0.1:{port},server,nowait"));
+    cmd.stdout(Stdio::piped());
+    let mut child = cmd.spawn()?;
+
+    // serial reader thread, lines flow back over a channel and echo
+    // to the terminal so failures come with their evidence attached
+    let stdout = child.stdout.take().expect("qemu stdout not captured");
+    let (tx, rx) = mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(|l| l.ok()) {
+            println!("  | {}", line.trim_end());
+            let _ = tx.send(line);
+        }
+    });
+
+    /// scan serial until the marker shows up. a panic banner on the
+    /// way is an instant fail, the echo above already printed why.
+    fn wait_for(rx: &mpsc::Receiver<String>, marker: &str, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let now = Instant::now();
+            if now >= deadline {
+                return Err(format!("timed out waiting for {marker:?}").into());
+            }
+            match rx.recv_timeout(deadline - now) {
+                Ok(line) => {
+                    if line.contains("KERNEL PANIC") {
+                        return Err(format!("kernel panicked while waiting for {marker:?}").into());
+                    }
+                    if line.contains(marker) {
+                        return Ok(());
+                    }
+                }
+                Err(_) => return Err(format!("timed out waiting for {marker:?}").into()),
+            }
+        }
+    }
+
+    // the closure owns teardown so a failed assert still kills qemu
+    let mut monitor: Option<TcpStream> = None;
+    let verdict = (|| -> Result<()> {
+        // uefi and limine take the first seconds, be generous once
+        wait_for(&rx, BOOT_MARKERS[0], Duration::from_secs(90))?;
+        for m in &BOOT_MARKERS[1..] {
+            wait_for(&rx, m, Duration::from_secs(30))?;
+        }
+
+        // monitor comes up with the vm, connect with a little patience
+        let mut mon = None;
+        for _ in 0..20 {
+            if let Ok(s) = TcpStream::connect(("127.0.0.1", port)) {
+                mon = Some(s);
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+        let mon = mon.ok_or("could not connect to the qemu monitor")?;
+        monitor = Some(mon.try_clone()?);
+        let sendkey = |key: &str| -> Result<()> {
+            let mut m = &mon;
+            writeln!(m, "sendkey {key}")?;
+            m.flush()?;
+            // let the guest drain the scancodes before the next burst
+            std::thread::sleep(Duration::from_millis(300));
+            Ok(())
+        };
+
+        // walk the subscreens, the markers prove the whole input path
+        sendkey("2")?;
+        wait_for(&rx, "menu: sysinfo", Duration::from_secs(15))?;
+        sendkey("esc")?;
+        sendkey("3")?;
+        wait_for(&rx, "menu: graphics test", Duration::from_secs(15))?;
+        sendkey("esc")?;
+
+        if wad {
+            // the main event. i_initgraphics is the last init line
+            // doomgeneric logs, past it the engine is in its loop, so
+            // doom made it through wad loading and engine init.
+            sendkey("1")?;
+            wait_for(&rx, "menu: starting doom", Duration::from_secs(15))?;
+            wait_for(&rx, "I_InitGraphics", Duration::from_secs(120))?;
+        } else {
+            // no wad, prove the power path instead
+            sendkey("5")?;
+            wait_for(&rx, "menu: shutdown", Duration::from_secs(15))?;
+        }
+        Ok(())
+    })();
+
+    // teardown: ask the monitor to quit, then make sure of it
+    if let Some(mut m) = monitor {
+        let _ = writeln!(m, "quit");
+        let _ = m.flush();
+    }
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if child.try_wait()?.is_some() {
+            break;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
+
+    verdict?;
+    println!("xtask: boot test passed");
     Ok(())
 }

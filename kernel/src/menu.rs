@@ -276,6 +276,7 @@ fn draw_status_strip(fb: &mut Framebuffer, wad: Option<&'static [u8]>) {
 
 /// system info: the boot banner facts, sigil keyvalue style.
 fn sysinfo_screen(wad: Option<&'static [u8]>) {
+    serial_println!("menu: sysinfo");
     console::with(|c| {
         let fb = c.framebuffer();
         fb.clear(SURFACE_BASE);
@@ -324,6 +325,7 @@ fn sysinfo_screen(wad: Option<&'static [u8]>) {
 /// graphics test: palette swatches, channel ramps, font specimen.
 /// enough to spot a broken blit or a swapped channel at a glance.
 fn graphics_test_screen() {
+    serial_println!("menu: graphics test");
     console::with(|c| {
         let fb = c.framebuffer();
         fb.clear(SURFACE_BASE);
